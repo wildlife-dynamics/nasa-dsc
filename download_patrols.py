@@ -22,11 +22,16 @@ output_dir = 'Outputs/'
 os.makedirs(output_dir, exist_ok=True)
 
 def export_gpkg(df, dir=None, outname=None, lyrname=None):
-            df.drop(
-                columns=df.columns[df.applymap(lambda x: isinstance(x, list)).any()],
-                errors="ignore",
-                inplace=False,
-            ).to_file(os.path.join(dir or '.', outname or 'df.gpkg'), layer=lyrname or 'df')
+    df = df.copy()
+    # df['geometry'] = df['geometry'].make_valid()
+    check_columns = df.columns.to_list()
+    check_columns.remove("geometry")
+    df.drop(
+        columns=df[check_columns].columns[df[check_columns].applymap(lambda x: isinstance(x, list)).any()],
+        errors="ignore",
+        inplace=True,
+    )
+    df.to_file(os.path.join(dir or '.', outname or 'df.gpkg'), layer=lyrname or 'df')
 
 
 def main():
@@ -40,6 +45,7 @@ def main():
     until_filter = pd.to_datetime(os.getenv('UNTIL'))
     er_patrol_serials_filter = ast.literal_eval(os.getenv("ER_PATROL_SERIALS_FILTER"))
     er_subject_names_filter = ast.literal_eval(os.getenv("ER_SUBJECT_FILTER"))
+    traj_columns = ast.literal_eval(os.getenv("TRAJ_COLUMNS"))
 
     er_io = EarthRangerConnection(
         server=er_server,
@@ -58,7 +64,7 @@ def main():
 
     if not patrols_df.empty:
 
-        #-------------------Relocs
+        #-------------------Relocs/Traj
 
         # download observations related to the patrols
         patrol_relocs = er_io.get_patrol_observations(
@@ -75,8 +81,15 @@ def main():
         if er_subject_names_filter:
             patrol_relocs = patrol_relocs[patrol_relocs['extra__subject__name'].isin(er_subject_names_filter)]
 
-        if not patrol_relocs.empty:
-            export_gpkg(patrol_relocs, dir=output_dir, outname="patrols.gpkg", lyrname='patrol_relocs')
+        # convert relocs to trajectory
+        patrol_traj = ecoscope.base.Trajectory.from_relocations(patrol_relocs)
+        patrol_traj = patrol_traj[traj_columns] # subset columns needed
+
+        if not patrol_traj.empty:
+            patrol_traj.groupby(['extra__patrol_id']).apply(
+                lambda t: export_gpkg(df=t, dir=output_dir, outname="patrols.gpkg", lyrname= str(t.name) + '_traj'),
+                include_groups=True,
+                )
 
         #-------------------Events
         
@@ -103,7 +116,11 @@ def main():
         ecoscope.io.earthranger_utils.normalize_column(patrol_events, "event_details")
         
         if not patrol_events.empty:
-            export_gpkg(patrol_events, dir=output_dir, outname="patrols.gpkg", lyrname='patrol_events')
+            patrol_events.groupby(['patrol_id']).apply(
+                lambda t: export_gpkg(df=t, dir=output_dir, outname="patrols.gpkg", lyrname= str(t.name) + '_events'),
+                include_groups=True,
+                )
+            export_gpkg(patrol_events, dir=output_dir, outname="patrols.gpkg", lyrname='events')
 
         
 if __name__ == "__main__":
