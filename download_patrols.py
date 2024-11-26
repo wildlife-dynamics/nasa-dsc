@@ -46,6 +46,7 @@ def main():
     er_patrol_serials_filter = ast.literal_eval(os.getenv("ER_PATROL_SERIALS_FILTER"))
     er_subject_names_filter = ast.literal_eval(os.getenv("ER_SUBJECT_FILTER"))
     traj_columns = ast.literal_eval(os.getenv("TRAJ_COLUMNS"))
+    event_columns = ast.literal_eval(os.getenv("EVENT_COLUMNS"))
 
     er_io = EarthRangerConnection(
         server=er_server,
@@ -83,10 +84,13 @@ def main():
 
         # convert relocs to trajectory
         patrol_traj = ecoscope.base.Trajectory.from_relocations(patrol_relocs)
-        patrol_traj = patrol_traj[traj_columns] # subset columns needed
 
+        # subset columns
+        patrol_traj = patrol_traj[traj_columns] 
+
+        # Export each trajectory as a GPKG lyr per patrol_id
         if not patrol_traj.empty:
-            patrol_traj.groupby(['extra__patrol_id']).apply(
+            patrol_traj.groupby(['extra__patrol_id'])[traj_columns].apply(
                 lambda t: export_gpkg(df=t, dir=output_dir, outname="patrols.gpkg", lyrname= str(t.name) + '_traj'),
                 include_groups=True,
                 )
@@ -101,26 +105,30 @@ def main():
         )
 
         # use the event ids to pull the full event details
+        # TODO: move this function to ecoscope-core library
         def chunk_df(df, chunk_size):
             chunks = [df.iloc[i : i + chunk_size].copy() for i in range(0, len(df), chunk_size)]
             return chunks
         
-        df_chunk_size = 1 # until this is deployed https://allenai.atlassian.net/browse/ERA-10527
-
+        df_chunk_size = 1 # until this is deployed https://allenai.atlassian.net/browse/ERA-10527, then =50
         patrol_events = pd.concat([er_io.get_events(event_ids=chunk['id'].astype(str).values.flatten().tolist())
                                         for chunk in chunk_df(patrol_events, df_chunk_size)]).reset_index()
         
         # pull out the patrol ID
         patrol_events['patrol_id'] = patrol_events['patrols'].apply(lambda x: x[0])
 
+        # unpack the event_details into their own columns
         ecoscope.io.earthranger_utils.normalize_column(patrol_events, "event_details")
-        
+
+        # subset columns
+        patrol_events = patrol_events[event_columns] 
+
+        # Export each set of event as a GPKG lyr per patrol_id
         if not patrol_events.empty:
-            patrol_events.groupby(['patrol_id']).apply(
+            patrol_events.groupby(['patrol_id'])[event_columns].apply(
                 lambda t: export_gpkg(df=t, dir=output_dir, outname="patrols.gpkg", lyrname= str(t.name) + '_events'),
                 include_groups=True,
                 )
-            export_gpkg(patrol_events, dir=output_dir, outname="patrols.gpkg", lyrname='events')
 
         
 if __name__ == "__main__":
