@@ -90,6 +90,7 @@ def main():
                 )
         
         # convert relocs to trajectory
+        patrol_relocs["groupby_col"] = patrol_relocs["patrol_id"]
         patrol_traj = ecoscope.base.Trajectory.from_relocations(patrol_relocs)
 
         # subset columns
