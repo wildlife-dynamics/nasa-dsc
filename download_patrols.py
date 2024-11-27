@@ -84,7 +84,7 @@ def main():
 
         # Export relocs to GPKG
         if not patrol_relocs.empty:
-            patrol_relocs.groupby(['extra__patrol_id'])[relocs_columns].apply(
+            patrol_relocs.groupby(['patrol_id'])[relocs_columns].apply(
                 lambda t: export_gpkg(df=t, dir=output_dir, outname=str(t.name)+"_patrols.gpkg", lyrname= 'relocs'),
                 include_groups=True,
                 )
