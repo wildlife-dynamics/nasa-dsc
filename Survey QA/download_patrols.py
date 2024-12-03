@@ -6,6 +6,8 @@ import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
 import ecoscope
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import helper as helper
 from ecoscope_workflows_ext_ecoscope.connections import EarthRangerConnection
 import ecoscope.plotting as plotting 
 
@@ -20,17 +22,6 @@ output_dir = 'Outputs/'
 
 # Create output directory if it doesn't exist
 os.makedirs(output_dir, exist_ok=True)
-
-def export_gpkg(df, dir=None, outname=None, lyrname=None):
-    df = df.copy()
-    check_columns = df.columns.to_list()
-    check_columns.remove("geometry")
-    df.drop(
-        columns=df[check_columns].columns[df[check_columns].applymap(lambda x: isinstance(x, list)).any()],
-        errors="ignore",
-        inplace=True,
-    )
-    df.to_file(os.path.join(dir or '.', outname or 'df.gpkg'), layer=lyrname or 'df')
 
 
 def main():
@@ -85,7 +76,7 @@ def main():
         # Export relocs to GPKG
         if not patrol_relocs.empty:
             patrol_relocs.groupby(['patrol_id'])[relocs_columns].apply(
-                lambda t: export_gpkg(df=t, dir=output_dir, outname=str(t.name)+"_patrols.gpkg", lyrname= 'relocs'),
+                lambda t: helper.export_gpkg(df=t, dir=output_dir, outname=str(t.name)+"_patrols.gpkg", lyrname= 'relocs'),
                 include_groups=True,
                 )
         
@@ -99,7 +90,7 @@ def main():
         # Export each trajectory as a GPKG lyr per patrol_id
         if not patrol_traj.empty:
             patrol_traj.groupby(['extra__patrol_id'])[traj_columns].apply(
-                lambda t: export_gpkg(df=t, dir=output_dir, outname=str(t.name)+"_patrols.gpkg", lyrname='traj'),
+                lambda t: helper.export_gpkg(df=t, dir=output_dir, outname=str(t.name)+"_patrols.gpkg", lyrname='traj'),
                 include_groups=True,
                 )
 
@@ -134,7 +125,7 @@ def main():
         # Export each set of event as a GPKG lyr per patrol_id
         if not patrol_events.empty:
             patrol_events.groupby(['patrol_id'])[event_columns].apply(
-                lambda t: export_gpkg(df=t, dir=output_dir, outname=str(t.name)+"_patrols.gpkg", lyrname='events'),
+                lambda t: helper.export_gpkg(df=t, dir=output_dir, outname=str(t.name)+"_patrols.gpkg", lyrname='events'),
                 include_groups=True,
                 )
 
