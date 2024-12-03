@@ -18,7 +18,7 @@ ecoscope.init()
 load_dotenv()
 
 # Output DIR
-output_dir = 'Outputs/'
+output_dir = 'Outputs/Patrols_to_GPKG'
 
 # Create output directory if it doesn't exist
 os.makedirs(output_dir, exist_ok=True)
@@ -69,7 +69,7 @@ def main():
         if er_patrol_serials_filter:
             patrol_relocs = patrol_relocs[patrol_relocs['patrol_serial_number'].isin(er_patrol_serials_filter)]
 
-        # filter based on subejct_name
+        # filter based on subject_name
         if er_subject_names_filter:
             patrol_relocs = patrol_relocs[patrol_relocs['extra__subject__name'].isin(er_subject_names_filter)]
 
