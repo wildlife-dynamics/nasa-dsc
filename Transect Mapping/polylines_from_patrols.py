@@ -1,7 +1,6 @@
 import os
 import sys
 import ast
-import getpass
 import pandas as pd
 import geopandas as gpd
 import numpy as np
@@ -55,6 +54,10 @@ def main():
         patrol_type=er_patrol_type,
     )
 
+     # filter based on serial number
+    if er_patrol_serials_filter:
+        patrols_df = patrols_df[patrols_df['serial_number'].isin(er_patrol_serials_filter)]
+
     if not patrols_df.empty:
 
         #-------------------Relocs/Traj
@@ -65,10 +68,6 @@ def main():
             include_patrol_details=True,
             include_subject_details=True,
         )
-
-        # filter based on serial number
-        if er_patrol_serials_filter:
-            patrol_relocs = patrol_relocs[patrol_relocs['patrol_serial_number'].isin(er_patrol_serials_filter)]
 
         # filter based on subject_name
         if er_subject_names_filter:
