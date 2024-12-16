@@ -1,10 +1,10 @@
 import os
 import sys
 import ast
-import getpass
 import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
+from pytz import timezone
 import ecoscope
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import helper as helper
@@ -33,6 +33,8 @@ def main():
     relocs_columns = ast.literal_eval(os.getenv("RELOCS_COLUMNS"))
     traj_columns = ast.literal_eval(os.getenv("TRAJ_COLUMNS"))
     event_columns = ast.literal_eval(os.getenv("EVENT_COLUMNS"))
+    export_tz = os.getenv('EXPORT_TIME_ZONE')
+
 
     # Output DIR
     output_dir = os.path.join('Outputs', 'Patrols_to_GPKG', er_server.strip("https://"), str(survey_number))
@@ -70,11 +72,14 @@ def main():
             include_subject_details=True,
         )
 
+        # localize the timezone
+        patrol_relocs['fixtime'] = patrol_relocs['fixtime'].dt.tz_convert(export_tz)
+
         # filter based on subject_name
         if er_subject_names_filter:
             patrol_relocs = patrol_relocs[patrol_relocs['extra__subject__name'].isin(er_subject_names_filter)]
 
-        # make sure serial number is int type
+        # make sure serial number is an integer type
         patrol_relocs['patrol_serial_number'] = patrol_relocs['patrol_serial_number'].astype(int)
 
         # Export relocs to GPKG
@@ -117,9 +122,12 @@ def main():
             chunks = [df.iloc[i : i + chunk_size].copy() for i in range(0, len(df), chunk_size)]
             return chunks
         
-        df_chunk_size = 1 # until this is deployed https://allenai.atlassian.net/browse/ERA-10527, then =50
+        df_chunk_size = 50 # until this is deployed https://allenai.atlassian.net/browse/ERA-10527, then =50
         patrol_events = pd.concat([er_io.get_events(event_ids=chunk['id'].astype(str).values.flatten().tolist())
                                         for chunk in chunk_df(patrol_events, df_chunk_size)]).reset_index()
+        
+        # convert the event times to local time
+        patrol_events['time'] = patrol_events['time'].dt.tz_convert(export_tz)
         
         # pull out the patrol ID
         patrol_events['patrol_id'] = patrol_events['patrols'].apply(lambda x: x[0])
