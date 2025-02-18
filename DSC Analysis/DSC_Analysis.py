@@ -93,11 +93,8 @@ def main():
         until=until_filter.isoformat(),
         patrol_type=er_patrol_type,
     )
-    print(patrols_df.head())
-    print(patrols_df.columns)
 
-
-    # download events linked with the patrol type
+    # Download events linked with the patrol type
     patrol_events = er_io.get_patrol_events(
         since=since_filter.isoformat(),
         until=until_filter.isoformat(), 
@@ -139,7 +136,7 @@ def main():
     patrol_events['survey_id'] = survey_name
 
     # export to csv
-    patrol_events.to_csv(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '.csv'))
+    patrol_events.to_csv(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '.csv'), index=False)
 
 
 
