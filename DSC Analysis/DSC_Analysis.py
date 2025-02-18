@@ -139,7 +139,7 @@ def main():
     patrol_events['survey_id'] = survey_name
 
     # export to csv
-    patrol_events.to_csv(os.path.join('.', 'Outputs', 'Analysis', 'dsc_analysis' + survey_name + '.csv'))
+    patrol_events.to_csv(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '.csv'))
 
 
 
