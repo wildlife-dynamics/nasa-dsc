@@ -35,11 +35,20 @@ def main():
 
     print("Successfully connected to EarthRanger.")
 
-    # get spatial features group
-    sf_group_df = er_io.get_spatial_features_group(er_sf_group_id)
+    try:
+        # get spatial features group
+        sf_group_df = er_io.get_spatial_features_group(er_sf_group_id)
 
-    gdf = gpd.GeoDataFrame(sf_group_df, geometry="geometry", crs="EPSG:4326")
-    print(gdf.head())
+        # convert to geopandas dataframe
+        gdf = gpd.GeoDataFrame(sf_group_df, geometry="geometry", crs="EPSG:4326")
+        print(f"Successfully fetched {len(gdf)} spatial features.")
+    except Exception as e:
+        print(f"Error fetching spatial features: {str(e)}")
+        if er_sf_group_id is None:
+            print("Spatial features group ID is not set. Check your SPATIAL_FEATURES_GROUP_ID environment variable.")
+        else:
+            print(f"Could not fetch spatial features group with ID: {er_sf_group_id}")
+        return None
 
 
 if __name__ == "__main__":
