@@ -69,6 +69,7 @@ def main():
     until_filter = pd.to_datetime(os.getenv('UNTIL'))
     export_tz = os.getenv('EXPORT_TIME_ZONE')
     event_column_transform = json.loads(os.getenv("EVENT_COLUMN_TRANSFORM"))
+    transects_group_id = os.getenv("ER_SPATIAL_TRANSECTS_GROUPID")
 
     # Check missing variables
     if not er_server or not er_username or not er_password:
@@ -100,6 +101,10 @@ def main():
         until=until_filter.isoformat(), 
         patrol_type=er_patrol_type,
     )
+
+    # Download the Spatial Transects
+    # get spatial features group
+    sf_group_df = er_io.get_spatial_features_group(transects_group_id)
 
     def chunk_df(df, chunk_size):
             chunks = [df.iloc[i : i + chunk_size].copy() for i in range(0, len(df), chunk_size)]
