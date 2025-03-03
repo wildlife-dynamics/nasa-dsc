@@ -25,7 +25,7 @@ def main():
     er_username = os.getenv('ER_USERNAME')
     er_password = os.getenv('ER_PASSWORD')
     er_patrol_type = os.getenv('ER_PATROL_TYPE')
-    survey_number = os.getenv('SURVEY_NUMBER')
+    survey_name = os.getenv('SURVEY_NAME')
     since_filter = pd.to_datetime(os.getenv('SINCE'))
     until_filter = pd.to_datetime(os.getenv('UNTIL'))
     er_patrol_serials_filter = ast.literal_eval(os.getenv("ER_PATROL_SERIALS_FILTER"))
@@ -37,7 +37,7 @@ def main():
 
 
     # Output DIR
-    output_dir = os.path.join('Outputs', 'Patrols_to_GPKG', er_server.strip("https://"), str(survey_number))
+    output_dir = os.path.join('Outputs', 'Patrols_to_GPKG', er_server.strip("https:////"), str(survey_name))
 
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
