@@ -6,9 +6,11 @@ from dotenv import load_dotenv
 from math import sin, cos, radians, pi
 import pandas as pd
 import geopandas as gpd
+import ee
 import ecoscope
 from ecoscope_workflows_ext_ecoscope.connections import EarthRangerConnection
 from ecoscope_workflows_ext_ecoscope.connections import EarthEngineConnection
+from ecoscope.io.eetools import label_gdf_with_temporal_image_collection_by_feature, label_gdf_with_img
 
 # Initialize ecoscope
 ecoscope.init()
@@ -78,7 +80,6 @@ def main():
     transects_group_id = os.getenv('ER_SPATIAL_TRANSECTS_GROUPID')
     event_column_transform = json.loads(os.getenv("EVENT_COLUMN_TRANSFORM"))
   
-
     # Check missing variables
     if not er_server or not er_username or not er_password:
             raise ValueError("Missing EarthRanger credentials. Please check your .env file.")
@@ -94,7 +95,7 @@ def main():
         sub_page_size = 4000,
     ).get_client()
 
-    logger.info(("Successfully connected to EarthRanger.")
+    logger.info("Successfully connected to EarthRanger.")
 
     # Initialize EarthEngine
     EarthEngineConnection(
@@ -104,16 +105,42 @@ def main():
     ).get_client()
     logger.info("Successfully connected to EarthEngine")
 
-    # Download patrol events within a given time frame
-    patrols_df = er_io.get_patrols(
-        since=since_filter.isoformat(),
-        until=until_filter.isoformat(),
-        patrol_type=er_patrol_type,
-    )
+    # Download the Spatial Transects
+    # TODO: the crs should be set in er_io.get_spatial_features_group
+    sf_group_df = er_io.get_spatial_features_group(transects_group_id).set_crs(4326)
+
+    # add a time column using the 'Since' time
+    sf_group_df['survey_date'] = since_filter
+
+    # Annotate transects with EarthEngine Data - NDVI
+    params = {
+        "time_col_name": "survey_date",
+        "n_before": 0, # requesting the 1 image after a feature's time value
+        "n_after": 0, # requesting the 1 image after a feature's time value
+        "n": "images",
+        "img_coll": ee.ImageCollection("MODIS/061/MCD43A4").select(["Nadir_Reflectance_Band2", "Nadir_Reflectance_Band1"]),
+        "region_reducer": ee.Reducer.mean(),
+        "scale": 500.0, 
+    }
+    sf_group_df = sf_group_df.merge(label_gdf_with_temporal_image_collection_by_feature(gdf=sf_group_df, **params),
+                                     left_index=True, right_index=True)
+    sf_group_df['img_date'] = pd.to_datetime(sf_group_df ['img_date']).dt.tz_localize('UTC')
+    sf_group_df['NDVI'] = sf_group_df.apply(lambda x: (x["Nadir_Reflectance_Band2"]-x["Nadir_Reflectance_Band1"])/(x["Nadir_Reflectance_Band2"] + x["Nadir_Reflectance_Band1"]), axis=1)
+
+    # Annotate transects with EarthEngine Data - elevation
+    sf_group_df = sf_group_df.merge(label_gdf_with_img(gdf=sf_group_df,
+                                     img= ee.Terrain.slope(ee.Image("USGS/SRTMGL1_003").select("elevation")),
+                                     region_reducer= ee.Reducer.mean(),
+                                     scale= 30.0,
+                                     ),
+                                     left_index=True, right_index=True)
+    
+    # subselect and rename columns that we want to keep
+    sf_group_df = sf_group_df.rename(columns={"mean":"slope"})[["name", "NDVI", "slope", "geometry"]]
 
     # Download events linked with the patrol type
     # TODO: Request that event_details, event_category be passed back from get_patrol_events()
-    # TODO: the event ID should be the index here
+    # TODO: the event ID should be the index
     # 'id', 'serial_number', 'event_type', 'priority', 'title', 'state',
     # 'contains', 'updated_at', 'created_at', 'geojson', 'is_collection',
     # 'patrol_id', 'patrol_serial_number', 'patrol_segment_id',
@@ -169,10 +196,6 @@ def main():
     # set the name of the survey
     patrol_events['survey_id'] = survey_name
 
-    # Download the Spatial Transects
-    # TODO: the crs should be set in er_io.get_spatial_features_group
-    sf_group_df = er_io.get_spatial_features_group(transects_group_id).set_crs(4326) 
-
     # Project the transects to UTM coordinates
     utm_crs = sf_group_df.estimate_utm_crs()
     sf_group_df = sf_group_df.to_crs(utm_crs)
@@ -211,6 +234,14 @@ def main():
         return rows
     patrol_events = patrol_events.groupby(["transect_id"]).apply(calculate_distance, include_groups=False).reset_index()
 
+
+    # Join the transect data onto each event to retrieve the EE annotations
+    patrol_events = patrol_events.merge(sf_group_df.drop(columns=["geometry"]), 
+                                        left_on="transect_id", right_on="name",
+                                        how="left").drop(columns=["name"])
+
+
+    #-----EXPORT-----#
     # export to csv
     patrol_events.to_csv(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '.csv'), index=False)
     
