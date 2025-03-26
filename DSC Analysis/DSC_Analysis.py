@@ -8,9 +8,13 @@ import pandas as pd
 import geopandas as gpd
 import ecoscope
 from ecoscope_workflows_ext_ecoscope.connections import EarthRangerConnection
+from ecoscope_workflows_ext_ecoscope.connections import EarthEngineConnection
 
 # Initialize ecoscope
 ecoscope.init()
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 # load environment variables
 load_dotenv()
@@ -79,8 +83,8 @@ def main():
     if not er_server or not er_username or not er_password:
             raise ValueError("Missing EarthRanger credentials. Please check your .env file.")
 
-    print("Environment variables loaded successfully.")
-    print(f"Connecting to EarthRanger at {er_server}...")
+    logger.info("Environment variables loaded successfully.")
+    logger.info(f"Connecting to EarthRanger at {er_server}...")
     
     er_io = EarthRangerConnection(
         server = er_server,
@@ -90,7 +94,15 @@ def main():
         sub_page_size = 4000,
     ).get_client()
 
-    print("Successfully connected to EarthRanger.")
+    logger.info(("Successfully connected to EarthRanger.")
+
+    # Initialize EarthEngine
+    EarthEngineConnection(
+        service_account=os.getenv("EE_SERVICE_ACCOUNT") or "",
+        private_key_file=os.getenv("EE_PRIVATE_KEY_FILE") or "",
+        ee_project=os.getenv("EE_PROJECT") or "",
+    ).get_client()
+    logger.info("Successfully connected to EarthEngine")
 
     # Download patrol events within a given time frame
     patrols_df = er_io.get_patrols(
@@ -100,6 +112,8 @@ def main():
     )
 
     # Download events linked with the patrol type
+    # TODO: Request that event_details, event_category be passed back from get_patrol_events()
+    # TODO: the event ID should be the index here
     # 'id', 'serial_number', 'event_type', 'priority', 'title', 'state',
     # 'contains', 'updated_at', 'created_at', 'geojson', 'is_collection',
     # 'patrol_id', 'patrol_serial_number', 'patrol_segment_id',
@@ -109,8 +123,7 @@ def main():
         until=until_filter.isoformat(), 
         patrol_type=er_patrol_type,
     ).set_index('id')
-    # TODO: Request that event_details, event_category be passed back from get_patrol_events()
-    # TODO: the event ID should be the index here
+    
 
     # Because the er_io.get_patrol_events() function does not return the event details
     # we need to re-query the API using each event ID. But these can overwhelm the http query limit
@@ -122,17 +135,13 @@ def main():
     #   'updated_at', 'created_at', 'icon_id', 'serial_number', 'url',
     #   'image_url', 'geojson', 'is_collection', 'event_details',
     #   'related_subjects', 'patrols'
-    # We need to join these two tables based on the id column and keep ['event_details', 'serial_number'] columns
-
+    # We need to join these two tables based on the id column and keep ['event_details'] columns
     df_chunk_size = 25
-
     def chunk_df(df, chunk_size):
             chunks = [df.iloc[i : i + chunk_size].copy() for i in range(0, len(df), chunk_size)]
             return chunks
-    
     patrol_events2 = pd.concat([er_io.get_events(event_ids=chunk.index.astype(str).values.flatten().tolist())
                                         for chunk in chunk_df(patrol_events, df_chunk_size)])
-    
     patrol_events = pd.merge(left=patrol_events,
                                 right=patrol_events2[['event_details']], 
                                 how='left', 
@@ -150,22 +159,19 @@ def main():
     patrol_events = transform_df_columns(df=patrol_events, column_map_dict=event_column_transform)
 
     # ensure each row has the correct transect_id and num_of_observers
+    # TODO: figure out why .loc[[]] notation is not working for assigning slices
     patrol_events[['transect_id']] = patrol_events.groupby('patrol_serial_number', as_index=False, group_keys=False)[['transect_id']].apply(lambda x: x.bfill().ffill()) # .reset_index(level=0, drop=True)
     patrol_events[['num_observers']] = patrol_events.groupby('patrol_serial_number', as_index=False, group_keys=False)[['num_observers']].apply(lambda x: x.bfill().ffill()) #.reset_index(level=0, drop=True)
-    # TODO: figure out why .loc[[]] notation is not working for assigning slices
-
+    
     # subset the DF to just the wildlife sightings and drop the metadata
     patrol_events = patrol_events[patrol_events['event_type']=='distancecountwildlife_rep']
 
     # set the name of the survey
     patrol_events['survey_id'] = survey_name
 
-    # # export 
-    # patrol_events.to_file(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_events_orig.gpkg'), index=False)
-
     # Download the Spatial Transects
-    sf_group_df = er_io.get_spatial_features_group(transects_group_id).set_crs(4326) 
     # TODO: the crs should be set in er_io.get_spatial_features_group
+    sf_group_df = er_io.get_spatial_features_group(transects_group_id).set_crs(4326) 
 
     # Project the transects to UTM coordinates
     utm_crs = sf_group_df.estimate_utm_crs()
