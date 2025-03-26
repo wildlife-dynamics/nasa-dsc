@@ -246,7 +246,7 @@ def main():
     patrol_events.to_csv(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '.csv'), index=False)
     
     # export to gpkg
-    patrol_events[["serial_number", "transect_id", "dist_to_centre", "corr_dist",  "geometry"]].to_file(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_events_calc.gpkg'), index=False)
+    patrol_events[["serial_number", "transect_id", "dist_to_centre", "corr_dist",  "geometry"]].to_file(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_events.gpkg'), index=False)
     sf_group_df.to_file(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_transects.gpkg'), index=False)
 
 
