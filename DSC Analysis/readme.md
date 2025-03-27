@@ -1,4 +1,5 @@
 ## Inputs
+
 - The DSC_Analysis.py file requires an .env file with the following structure:
 
         EXPORT_TIME_ZONE="Africa/Nairobi"
