@@ -1,3 +1,4 @@
+## Inputs
 - The DSC_Analysis.py file requires an .env file with the following structure:
 
         EXPORT_TIME_ZONE="Africa/Nairobi"
@@ -19,6 +20,7 @@
             "event_details__distancecountwildlife_distancetocentre": "dist_to_centre"
         }'
 
+        ER_SERVER=<URL>
         ER_USERNAME=<user>
         ER_PASSWORD=<password>
         ER_PATROL_TYPE=<Patrol Type UUID>
@@ -29,3 +31,14 @@
 
 
 - The Script also erquires a valid EE authentication token is available on the execution machine. 
+
+## Outputs
+
+1. DSC_Analysis_SURVEY_NAME_events.gpkg
+    - this file has the original event locations and the projected event locations based on the radialangle and dist_to_centre values.
+
+2. DSC_Analysis_SURVEY_NAME_transects.gpkg
+    - the set of 1km transects used in the given survey.
+
+3. DSC_Analysis_SURVEY_NAME_analysis_data.csv
+    - The set of labeled events and associated count data for use in further analysis.
