@@ -243,7 +243,7 @@ def main():
 
     #-----EXPORT-----#
     # export to csv
-    patrol_events.to_csv(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '.csv'), index=False)
+    patrol_events.to_csv(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_analysis_data.csv'), index=False)
     
     # export to gpkg
     patrol_events[["serial_number", "transect_id", "dist_to_centre", "corr_dist",  "geometry"]].to_file(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_events.gpkg'), index=False)
