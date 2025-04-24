@@ -4,7 +4,6 @@ import ast
 
 import pandas as pd
 import geopandas as gpd
-import numpy as np
 from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -29,9 +28,9 @@ def main():
         "er_patrol_serials_filter": ast.literal_eval(os.getenv("ER_PATROL_SERIALS_FILTER")),
         "er_subject_names_filter": ast.literal_eval(os.getenv("ER_SUBJECT_FILTER")),
         "output_dir": os.getenv("OUTPUT_DIR"),
-        "er_output_mode": os.getenv("OUTPUT_MODE", "both").lower()
+        "er_output_mode": os.getenv("OUTPUT_MODE", "both").lower(),
     }
-    
+
     # Create output directory
     os.makedirs(config["output_dir"], exist_ok=True)
 
@@ -70,9 +69,7 @@ def main():
 
         # Filter based on subject_name
         if config["er_subject_names_filter"]:
-            patrol_relocs = patrol_relocs[
-                patrol_relocs["extra__subject__name"].isin(config["er_subject_names_filter"])
-            ]
+            patrol_relocs = patrol_relocs[patrol_relocs["extra__subject__name"].isin(config["er_subject_names_filter"])]
 
         # Turn the relocations into trajectory segments and union the segments into single polylines
         def create_trajectory(x):
@@ -80,7 +77,7 @@ def main():
                 geo = ecoscope.base.Trajectory.from_relocations(x)["geometry"].unary_union
                 if geo:
                     return gpd.GeoSeries({"geometry": geo}, crs=4326)
-                    
+
         patrol_polylines = patrol_relocs.groupby("patrol_serial_number").apply(create_trajectory, include_groups=True)
 
         # Export based on OUTPUT_MODE
@@ -90,10 +87,10 @@ def main():
                 try:
                     patrol_gdf = patrol_polylines.loc[[patrol_serial]]
                     helper.export_gpkg(
-                        df=patrol_gdf, 
-                        dir=config["output_dir"], 
-                        outname=f"{patrol_serial}_Polyline.gpkg", 
-                        lyrname="patrol_polyline"
+                        df=patrol_gdf,
+                        dir=config["output_dir"],
+                        outname=f"{patrol_serial}_Polyline.gpkg",
+                        lyrname="patrol_polyline",
                     )
                     print(f"Exported individual geopackage for patrol: {patrol_serial}")
                 except Exception as e:
@@ -102,10 +99,10 @@ def main():
         if config["er_output_mode"] in ["grouped", "both"]:
             # Export the grouped geopackage
             helper.export_gpkg(
-                df=patrol_polylines, 
-                dir=config["output_dir"], 
-                outname="Patrol_Polylines.gpkg", 
-                lyrname="patrol_polylines"
+                df=patrol_polylines,
+                dir=config["output_dir"],
+                outname="Patrol_Polylines.gpkg",
+                lyrname="patrol_polylines",
             )
             print("Exported grouped geopackage with all patrols")
 
