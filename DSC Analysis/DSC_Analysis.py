@@ -107,36 +107,8 @@ def main():
 
     # Download the Spatial Transects
     # TODO: the crs should be set in er_io.get_spatial_features_group
-    sf_group_df = er_io.get_spatial_features_group(transects_group_id).set_crs(4326)
-
-    # add a time column using the 'Since' time
-    sf_group_df['survey_date'] = since_filter
-
-    # Annotate transects with EarthEngine Data - NDVI
-    params = {
-        "time_col_name": "survey_date",
-        "n_before": 0, # requesting the 1 image after a feature's time value
-        "n_after": 0, # requesting the 1 image after a feature's time value
-        "n": "images",
-        "img_coll": ee.ImageCollection("MODIS/061/MCD43A4").select(["Nadir_Reflectance_Band2", "Nadir_Reflectance_Band1"]),
-        "region_reducer": ee.Reducer.mean(),
-        "scale": 500.0, 
-    }
-    sf_group_df = sf_group_df.merge(label_gdf_with_temporal_image_collection_by_feature(gdf=sf_group_df, **params),
-                                     left_index=True, right_index=True)
-    sf_group_df['img_date'] = pd.to_datetime(sf_group_df ['img_date']).dt.tz_localize('UTC')
-    sf_group_df['NDVI'] = sf_group_df.apply(lambda x: (x["Nadir_Reflectance_Band2"]-x["Nadir_Reflectance_Band1"])/(x["Nadir_Reflectance_Band2"] + x["Nadir_Reflectance_Band1"]), axis=1)
-
-    # Annotate transects with EarthEngine Data - elevation
-    sf_group_df = sf_group_df.merge(label_gdf_with_img(gdf=sf_group_df,
-                                     img= ee.Terrain.slope(ee.Image("USGS/SRTMGL1_003").select("elevation")),
-                                     region_reducer= ee.Reducer.mean(),
-                                     scale= 30.0,
-                                     ),
-                                     left_index=True, right_index=True)
-    
-    # subselect and rename columns that we want to keep
-    sf_group_df = sf_group_df.rename(columns={"mean":"slope"})[["name", "NDVI", "slope", "geometry"]]
+    transects = er_io.get_spatial_features_group(transects_group_id).set_crs(4326)
+    original_transects = transects.copy()
 
     # Download events linked with the patrol type
     # TODO: Request that event_details, event_category be passed back from get_patrol_events()
@@ -150,7 +122,6 @@ def main():
         until=until_filter.isoformat(), 
         patrol_type=er_patrol_type,
     ).set_index('id')
-    
 
     # Because the er_io.get_patrol_events() function does not return the event details
     # we need to re-query the API using each event ID. But these can overwhelm the http query limit
@@ -162,12 +133,13 @@ def main():
     #   'updated_at', 'created_at', 'icon_id', 'serial_number', 'url',
     #   'image_url', 'geojson', 'is_collection', 'event_details',
     #   'related_subjects', 'patrols'
+
     # We need to join these two tables based on the id column and keep ['event_details'] columns
     df_chunk_size = 25
     def chunk_df(df, chunk_size):
             chunks = [df.iloc[i : i + chunk_size].copy() for i in range(0, len(df), chunk_size)]
             return chunks
-    patrol_events2 = pd.concat([er_io.get_events(event_ids=chunk.index.astype(str).values.flatten().tolist())
+    patrol_events2 = pd.concat([er_io.get_events(event_ids=chunk.index.astype(str).values.flatten().tolist(), include_details=True)
                                         for chunk in chunk_df(patrol_events, df_chunk_size)])
     patrol_events = pd.merge(left=patrol_events,
                                 right=patrol_events2[['event_details']], 
@@ -197,16 +169,31 @@ def main():
     patrol_events['survey_id'] = survey_name
 
     # Project the transects to UTM coordinates
-    utm_crs = sf_group_df.estimate_utm_crs()
-    sf_group_df = sf_group_df.to_crs(utm_crs)
+    utm_crs = transects.estimate_utm_crs()
+    transects = transects.to_crs(utm_crs)
 
     # Project the events to the same UTM coordinates
     patrol_events = patrol_events.to_crs(utm_crs)
 
-    # Make a copy of the original coords
+     # calculate the orthogonal distance
+    def calculate_distance(rows, dist="dist"):
+        # find the geometry of the matching transect
+        patrol_transect_geo = transects[transects["name"]==rows.name]
+        if patrol_transect_geo.empty:
+             raise Exception("No matching spatial transect: " + rows.name)
+        if len(patrol_transect_geo) > 1:
+             raise Exception("More than one matching transect: " + rows.name)
+        
+        rows[dist] = rows["geometry"].distance(patrol_transect_geo.iloc[0]["geometry"], align=False)
+        return rows
+    
+    # calculate the off-transect dist
+    patrol_events = patrol_events.groupby(["transect_id"]).apply(calculate_distance, include_groups=False, dist="off_transect_dist").reset_index()
+
+    # Make a copy of the original coords for posterity
     patrol_events["orig_geometry"] = patrol_events["geometry"]
 
-    # Project the point to the observed location   
+    # Project the point to the observed location using the measured distance and direction
     def point_pos(x0, y0, d, theta):
         theta_rad = radians(theta)
         return x0 + d*sin(theta_rad), y0 + d*cos(theta_rad)
@@ -221,33 +208,151 @@ def main():
                 ),
                 axis=1)), crs=utm_crs)
     
-    # calculate the orthogonal distance
-    def calculate_distance(rows):
-        # find the geometry of the matching transect
-        patrol_transect_geo = sf_group_df[sf_group_df["name"]==rows.name]
-        if patrol_transect_geo.empty:
-             raise Exception("No matching spatial transect: " + rows.name)
-        if len(patrol_transect_geo) > 1:
-             raise Exception("More than one matching transect: " + rows.name)
-        
-        rows["corr_dist"] = rows["geometry"].distance(patrol_transect_geo.iloc[0]["geometry"], align=False)
-        return rows
-    patrol_events = patrol_events.groupby(["transect_id"]).apply(calculate_distance, include_groups=False).reset_index()
+    # Calculate the orthgonal distance of the pprojected point to the transect
+    patrol_events = patrol_events.groupby(["transect_id"]).apply(calculate_distance, include_groups=False, dist="ortho_dist").reset_index()
 
+
+    ###---------------- Transect Polygon Creation ----------------###
+
+    # Simplify the transect geometries
+    transects["geometry"] = transects["geometry"].simplify(50)
+
+    # Transform the polyline transects into buffered polygons (500m aside) with flat ends
+    transects["geometry"] = transects["geometry"].buffer(500, resolution=5, cap_style='flat', single_sided=False)
+
+    # Calculate the intersection of the event with each transect polygon
+    # patrol_events["intersects_transect"] = sf_group_df["geometry"].intersects(patrol_events["geometry"])
+    def do_events_intersect_transect(events):
+        try:
+            patrol_transect = transects[transects["name"]==events.name]
+            print(patrol_transect)
+            print(events)
+            events["intersects_transect"] = events["geometry"].intersects(patrol_transect.iloc[0]["geometry"])
+        except:
+            events["intersects_transect"] = False
+
+        return events
+
+    patrol_events = patrol_events.groupby(["transect_id"]).apply(do_events_intersect_transect, include_groups=True).set_index("id")
+
+    ###---------------- GEE Labeling ----------------###
+
+    # Project to WGS84 GCS
+    transects = transects.to_crs(4326)
+
+    # add a time column using the 'Since' time
+    transects['survey_date'] = since_filter
+
+    # # Annotate transects with EarthEngine Data - NDVI
+    # params = {
+    #     "time_col_name": "survey_date",
+    #     "n_before": 0, # requesting the 1 image after a feature's time value
+    #     "n_after": 0, # requesting the 1 image after a feature's time value
+    #     "n": "images",
+    #     "img_coll": ee.ImageCollection("MODIS/061/MCD43A4").select(["Nadir_Reflectance_Band2", "Nadir_Reflectance_Band1"]),
+    #     "region_reducer": ee.Reducer.mean(),
+    #     "scale": 200.0, 
+    # }
+    # transects = transects.merge(label_gdf_with_temporal_image_collection_by_feature(gdf=transects, **params),
+    #                                  left_index=True, right_index=True)
+    
+    # transects['NDVI_MODIS'] = transects.apply(lambda x: (x["Nadir_Reflectance_Band2"]-x["Nadir_Reflectance_Band1"])/(x["Nadir_Reflectance_Band2"] + x["Nadir_Reflectance_Band1"]), axis=1)
+    # transects['img_date_modis_ndvi'] = pd.to_datetime(transects['img_date']).dt.tz_localize('UTC')
+    # transects.drop(columns=['img_date'], inplace=True)
+    
+    # Annotate with cloud masked NDVI product
+    def ndvi_composite():
+
+        def ndvi(ee_image):
+            return ee_image.addBands(ee_image.normalizedDifference(['NIR', 'Red']).rename('NDVI_HSL'))
+        
+        # Define function for masking clouds and applying scaling factors for HLS products
+        def maskHLS(ee_image):
+            # HLS uses 'Fmask' for quality assessment
+            #3 Bit 0 - Cirrus | Bit 1 - Cloud | Bit 2 - Adjacent to Cloud/Shadow | Bit 3 - Cloud Shadow
+            qaMask = ee_image.select('Fmask').bitwiseAnd(int('1111', 2)).eq(0) 
+
+            # Apply the HLS scaling factor (0.0001) to relevant bands.
+            opticalBands = ee_image.select(['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2']) \
+                                    .multiply(0.0001)
+
+            # Return the masked image with scaled optical bands.
+            return ee_image.updateMask(qaMask).addBands(opticalBands, None, True).copyProperties(
+                ee_image, ['system:time_start', 'system:index', 'SPACECRAFT_ID', 'CLOUD_COVER'])
+        
+        # List the desired bands these two collections share in common
+        SharedBands = ['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2', 'Fmask']
+        L30Bands = ['B2','B3','B4','B5','B6','B7','Fmask']
+        S30Bands = ['B2','B3','B4','B8A','B11','B12','Fmask']
+
+        # HLS Collections (v2.0)
+
+        # Landsat 8/9
+        HLS_L30_COLLECTION = ee.ImageCollection('NASA/HLS/HLSL30/v002') \
+            .filter(ee.Filter.lt('CLOUD_COVERAGE', 30))  # Don't mess with images with >30% cloud
+        
+        # Sentinel-2
+        HLS_S30_COLLECTION = ee.ImageCollection('NASA/HLS/HLSS30/v002') \
+            .filter(ee.Filter.lt('CLOUD_COVERAGE', 30))  # Don't mess with images with >30% cloud
+
+        #Combine HLSL30 and HLSS30 collections
+        hlsMerged = HLS_L30_COLLECTION.select(L30Bands, SharedBands) \
+            .merge(HLS_S30_COLLECTION.select(S30Bands, SharedBands))
+
+        # Apply the NDVI calculation and generate a mean pixel composite
+        ndviComposite = hlsMerged.map(ndvi).select('NDVI_HSL') # .mean()
+
+        return ndviComposite
+
+    ndvi_composite_params = {
+        "time_col_name": "survey_date",
+        "n_before": 0, # requesting the images before a feature's time value
+        "n_after": 0, # requesting the images after a feature's time value
+        "n": "images",
+        "img_coll": ndvi_composite().filterBounds(ee.FeatureCollection(transects.__geo_interface__)),
+        "region_reducer": ee.Reducer.mean(),
+        "scale": 30.0,
+    }
+    transects = transects.merge(label_gdf_with_temporal_image_collection_by_feature(gdf=transects, **ndvi_composite_params),
+                                     left_index=True, right_index=True)
+    
+    transects['img_date_hsl_ndvi'] = pd.to_datetime(transects['img_date']).dt.tz_localize('UTC')
+    transects.drop(columns=['img_date'], inplace=True)
+    
+    print(transects.columns)
+    
+    # Annotate transects with EarthEngine Data - elevation
+    transects = transects.merge(label_gdf_with_img(gdf=transects,
+                                     img = ee.Terrain.slope(ee.Image("USGS/SRTMGL1_003").select("elevation")),
+                                     region_reducer= ee.Reducer.mean(),
+                                     scale= 30.0,
+                                     ),
+                                     left_index=True, right_index=True)
+    
+    # rename columns that we want to keep
+    transects = transects.rename(columns={"mean":"slope"}) 
+
+    # subselect columns
+    transects = transects[["name", "img_date_hsl_ndvi", "NDVI_HSL", "slope", "geometry"]]
 
     # Join the transect data onto each event to retrieve the EE annotations
-    patrol_events = patrol_events.merge(sf_group_df.drop(columns=["geometry"]), 
+    patrol_events = patrol_events.merge(transects.drop(columns=["geometry"]), 
                                         left_on="transect_id", right_on="name",
                                         how="left").drop(columns=["name"])
 
 
-    #-----EXPORT-----#
+    ##---------------- EXPORT ----------------##
+
     # export to csv
     patrol_events.to_csv(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_analysis_data.csv'), index=False)
     
     # export to gpkg
-    patrol_events[["serial_number", "transect_id", "dist_to_centre", "corr_dist",  "geometry"]].to_file(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_events.gpkg'), index=False)
-    sf_group_df.to_file(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_transects.gpkg'), index=False)
+    patrol_events[["serial_number", "transect_id", "dist_to_centre", "ortho_dist", "intersects_transect", "geometry"]].to_file(
+         os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_events.gpkg'), index=False)
+    
+    transects.to_file(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_transects.gpkg'), index=False)
+
+    original_transects.to_file(os.path.join('.', 'Outputs', 'Analysis', 'DSC_Analysis_' + survey_name + '_orig_transects.gpkg'), index=False)
 
 
 if __name__ == "__main__":

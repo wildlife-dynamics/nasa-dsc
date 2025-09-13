@@ -9,8 +9,8 @@ dependencies:
   - pip
   - git
   - jupyterlab
-  - geopandas<=0.14.2
-  - numpy<2.0
+  - geopandas
+  - numpy
   - python-dotenv
   - python-kaleido
 
