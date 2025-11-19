@@ -163,3 +163,4 @@ cython_debug/
 /Outputs
 .DS_Store
 /Survey QA/Outputs
+DSC Analysis/.env.old

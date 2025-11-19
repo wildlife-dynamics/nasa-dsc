@@ -1,0 +1,192 @@
+[
+  {
+    "earthranger": {
+      "server": "https://naboisho.pamdas.org",
+      "patrolType": "ccd529f8-d603-491e-ac12-0fb65e6e4bad",
+      "credentialsKey": "NABOISHO",
+      "exportTimezone": "Africa/Nairobi",
+      "eventColumnTransform": {
+        "time": "time",
+        "event_type": "event_type", 
+        "title": "title", 
+        "geometry": "geometry",
+        "serial_number": "serial_number", 
+        "patrol_id": "patrol_id", 
+        "patrol_serial_number": "patrol_serial_number",
+        "event_details__distancecountpatrol_transectid": "transect_id",
+        "event_details__distancecountpatrol_numberofobservers": "num_observers",
+        "event_details__distancecountwildlife_species": "species",
+        "event_details__distancecountwildlife_totalcount": "totalcount",
+        "event_details__distancecountwildlife_numberofjuveniles": "num_juveniles",
+        "event_details__distancecountwildlife_radialangle": "radialangle",
+        "event_details__distancecountwildlife_distancetocentre": "dist_to_centre"
+        }
+    },
+    "surveys": [
+      {
+        "surveyName": "NABOISHO_Survey_2025_05",
+        "since": "2025-05-15T03:00:00+0000",
+        "until": "2025-05-17T21:00:00+0000",
+        "erSpatialTransectsGroupId": "162f404f-a404-4667-9334-ff187ae3491e"
+      },
+      {
+        "surveyName": "NABOISHO_Survey_2025_02",
+        "since": "2025-02-17T03:00:00+0000",
+        "until": "2025-02-20T21:00:00+0000",
+        "erSpatialTransectsGroupId": "162f404f-a404-4667-9334-ff187ae3491e"
+      },
+      {
+        "surveyName": "NABOISHO_Survey_2024_11",
+        "since": "2024-11-14T03:00:00+0000",
+        "until": "2024-11-15T21:00:00+0000",
+        "erSpatialTransectsGroupId": "162f404f-a404-4667-9334-ff187ae3491e"
+      }
+    ]
+  },
+  {
+    "earthranger": {
+      "server": "https://pardamat.pamdas.org",
+      "patrolType": "a4dd1dc2-6004-4c4c-8bbe-df76c8aee130",
+      "credentialsKey": "PCA",
+      "exportTimezone": "Africa/Nairobi",
+      "eventColumnTransform": {
+         "time": "time",
+          "event_type": "event_type", 
+          "title": "title", 
+          "geometry": "geometry",
+          "serial_number": "serial_number", 
+          "patrol_id": "patrol_id", 
+          "patrol_serial_number": "patrol_serial_number",
+          "event_details__distancecountpatrol_transectid": "transect_id",
+          "event_details__distancecountpatrol_numberofobservers": "num_observers",
+          "event_details__distancecountwildlife_species": "species",
+          "event_details__distancecountwildlife_totalcount": "totalcount",
+          "event_details__distancecountwildlife_numberofjuveniles": "num_juveniles",
+          "event_details__distancecountwildlife_radialangle": "radialangle",
+          "event_details__distancecountwildlife_distancetocentre": "dist_to_centre"
+      }
+    },
+    "surveys": [
+      {
+        "surveyName": "PCA_Survey_2025_05",
+        "since": "2025-05-15T03:00:00+0000",
+        "until": "2025-05-17T21:00:00+0000",
+        "erSpatialTransectsGroupId": "83367ac7-b949-4b4c-b249-719ba63c10d2"
+      },
+      {
+        "surveyName": "PCA_Survey_2025_02",
+        "since": "2025-02-17T03:00:00+0000",
+        "until": "2025-03-20T21:00:00+0000",
+        "erSpatialTransectsGroupId": "83367ac7-b949-4b4c-b249-719ba63c10d2"
+      },
+      {
+        "surveyName": "PCA_Survey_2024_11",
+        "since": "2024-11-14T03:00:00+0000",
+        "until": "2024-11-15T21:00:00+0000",
+        "erSpatialTransectsGroupId": "0e6a223a-43d8-4bf0-9e7f-7bbf49f180ca"
+      }
+    ]
+  },
+  {
+    "earthranger": {
+      "server": "https://enarauconservancy.pamdas.org",
+      "patrolType": "2bbe760a-21b2-48f1-9457-45d372295dfe",
+      "credentialsKey": "ENARAU",
+      "exportTimezone": "Africa/Nairobi",
+      "eventColumnTransform": {
+         "time": "time",
+          "event_type": "event_type", 
+          "title": "title", 
+          "geometry": "geometry",
+          "serial_number": "serial_number", 
+          "patrol_id": "patrol_id", 
+          "patrol_serial_number": "patrol_serial_number",
+          "event_details__distancecountpatrol_transectid": "transect_id",
+          "event_details__distancecountpatrol_numberofobservers": "num_observers",
+          "event_details__distancecountwildlife_species": "species",
+          "event_details__distancecountwildlife_totalcount": "totalcount",
+          "event_details__distancecountwildlife_numberofjuveniles": "num_juveniles",
+          "event_details__distancecountwildlife_radialangle": "radialangle",
+          "event_details__distancecountwildlife_distancetocentre": "dist_to_centre"
+      }
+    },
+    "surveys": [
+      {
+        "surveyName": "ENARAU_Survey_2025_05",
+        "since": "2025-05-15T03:00:00+0000",
+        "until": "2025-05-17T21:00:00+0000",
+        "erSpatialTransectsGroupId": "20a5f900-ed79-4b04-a233-5a28891f494d"
+      },
+      {
+        "surveyName": "ENARAU_Survey_2025_02",
+        "since": "2025-02-17T03:00:00+0000",
+        "until": "2025-02-20T21:00:00+0000",
+        "erSpatialTransectsGroupId": "20a5f900-ed79-4b04-a233-5a28891f494d"
+      },
+      {
+        "surveyName": "ENARAU_Survey_2024_11",
+        "since": "2024-11-14T03:00:00+0000",
+        "until": "2024-11-15T21:00:00+0000",
+        "erSpatialTransectsGroupId": "20a5f900-ed79-4b04-a233-5a28891f494d"
+      }
+    ]
+  },
+  {
+    "earthranger": {
+      "server": "https://mnc.pamdas.org",
+      "patrolType": "22ae7de7-63b3-44e7-8207-38ae1f71cd41",
+      "credentialsKey": "MNC",
+      "exportTimezone": "Africa/Nairobi",
+      "eventColumnTransform": {
+          "time": "time",
+          "event_type": "event_type", 
+          "title": "title", 
+          "geometry": "geometry",
+          "serial_number": "serial_number", 
+          "patrol_id": "patrol_id", 
+          "patrol_serial_number": "patrol_serial_number",
+          "event_details__distancecountpatrol_transectid": "transect_id",
+          "event_details__distancecountpatrol_numberofobservers": "num_observers",
+          "event_details__distancecountwildlife_species": "species",
+          "event_details__distancecountwildlife_totalcount": "totalcount",
+          "event_details__distancecountwildlife_numberofjuveniles": "num_juveniles",
+          "event_details__distancecountwildlife_radialangle": "radialangle",
+          "event_details__distancecountwildlife_distancetocentre": "dist_to_centre"
+      }
+    },
+    "surveys": [
+      {
+        "surveyName": "MNC_Survey_2025_05",
+        "since": "2025-05-15T03:00:00+0000",
+        "until": "2025-05-17T21:00:00+0000",
+        "erSpatialTransectsGroupId": "b7e19fc5-185a-44c3-95c2-7a05821f134a"
+      }
+    ]
+  },
+  {
+    "earthranger": {
+      "server": "https://olaremotorogi.pamdas.org",
+      "patrolType": "665a289e-2285-451a-823d-c8f94d7ae397",
+      "credentialsKey": "OMC",
+      "exportTimezone": "Africa/Nairobi",
+      "eventColumnTransform": {
+          "time": "time",
+          "event_type": "event_type", 
+          "title": "title", 
+          "geometry": "geometry",
+          "serial_number": "serial_number", 
+          "patrol_id": "patrol_id", 
+          "patrol_serial_number": "patrol_serial_number",
+          "event_details__distancecountpatrol_transectid": "transect_id",
+          "event_details__distancecountpatrol_numberofobservers": "num_observers",
+          "event_details__distancecountwildlife_species": "species",
+          "event_details__distancecountwildlife_totalcount": "totalcount",
+          "event_details__distancecountwildlife_numberofjuveniles": "num_juveniles",
+          "event_details__distancecountwildlife_radialangle": "radialangle",
+          "event_details__distancecountwildlife_distancetocentre": "dist_to_centre"
+      }
+    },
+    "surveys": [
+    ]
+  }
+]
