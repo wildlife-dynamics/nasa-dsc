@@ -1,0 +1,21 @@
+[project]
+name = "nasa-dsc"
+channels = ["https://repo.prefix.dev/ecoscope-workflows", "conda-forge"]
+platforms = ["osx-64", "linux-64"]
+
+[tasks]
+run-analysis = "python DSC_Analysis/DSC_Analysis.py"
+
+[dependencies]
+python = ">=3.9"
+geopandas = "*"
+pyproj = "*"
+python-dotenv = "*"
+
+    [dependencies.ecoscope-workflows-core]
+    channel = 'https://repo.prefix.dev/ecoscope-workflows/'
+    version = '0.18.0'
+
+    [dependencies.ecoscope-workflows-ext-ecoscope]
+    channel = 'https://repo.prefix.dev/ecoscope-workflows/'
+    version = '0.18.0'

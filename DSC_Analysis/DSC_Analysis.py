@@ -95,7 +95,7 @@ def run_analysis(er_connection: EarthRangerConnection, survey_config: SurveyConf
     event_column_transform = er_config.event_column_transform
 
     # Download the Spatial Transects
-    transects = er_connection.get_spatial_features_group(transects_group_id).set_crs(4326)
+    transects = er_connection.get_spatial_features_group(transects_group_id).set_crs(epsg=4326)
     original_transects = transects.copy()
 
     # Download events linked with the patrol type
@@ -184,7 +184,7 @@ def run_analysis(er_connection: EarthRangerConnection, survey_config: SurveyConf
 
     patrol_events = patrol_events.groupby(["transect_id"]).apply(do_events_intersect_transect, include_groups=True).set_index("id")
 
-    transects = transects.to_crs(4326)
+    transects = transects.to_crs(epsg=4326)
     transects['survey_date'] = since_filter
 
     def ndvi_composite():
