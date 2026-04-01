@@ -79,9 +79,13 @@ def transform_df_columns(df: pd.DataFrame = None, column_map_dict: Optional[Dict
             df_transformed = df.copy()
     return df_transformed
 
-def run_analysis(er_connection: EarthRangerConnection, survey_config: SurveyConfig, er_config: EarthRangerConfig):
+def run_analysis(er_connection: EarthRangerConnection, survey_config: SurveyConfig, er_config: EarthRangerConfig, ndvi_window_days: Optional[int] = 30, output_suffix: str = ""):
     """
     Runs the DSC analysis for a single survey.
+
+    ndvi_window_days: number of days either side of the survey date to filter the HLS image
+    collection. Set to None to search the full archive (slower, may hit GEE limits).
+    output_suffix: appended to output filenames to distinguish runs (e.g. '_window30', '_full').
     """
     logger.info(f"--- Starting Analysis for Survey: {survey_config.name} ---")
 
@@ -95,7 +99,7 @@ def run_analysis(er_connection: EarthRangerConnection, survey_config: SurveyConf
     event_column_transform = er_config.event_column_transform
 
     # Download the Spatial Transects
-    transects = er_connection.get_spatial_features_group(transects_group_id).set_crs(epsg=4326)
+    transects = er_connection.get_spatial_features_group(spatial_features_group_id=transects_group_id).set_crs(epsg=4326)
     original_transects = transects.copy()
 
     # Download events linked with the patrol type
@@ -187,49 +191,38 @@ def run_analysis(er_connection: EarthRangerConnection, survey_config: SurveyConf
     transects = transects.to_crs(epsg=4326)
     transects['survey_date'] = since_filter
 
-    def ndvi_composite():
-        def ndvi(ee_image):
-            return ee_image.addBands(ee_image.normalizedDifference(['NIR', 'Red']).rename('NDVI_HSL'))
-        
-        def maskHLS(ee_image):
-            qaMask = ee_image.select('Fmask').bitwiseAnd(int('1111', 2)).eq(0) 
-            opticalBands = ee_image.select(['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2']).multiply(0.0001)
-            return ee_image.updateMask(qaMask).addBands(opticalBands, None, True).copyProperties(
-                ee_image, ['system:time_start', 'system:index', 'SPACECRAFT_ID', 'CLOUD_COVER'])
-        
-        SharedBands = ['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2', 'Fmask']
-        L30Bands = ['B2','B3','B4','B5','B6','B7','Fmask']
-        S30Bands = ['B2','B3','B4','B8A','B11','B12','Fmask']
+    SharedBands = ['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2', 'Fmask']
+    L30Bands = ['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'Fmask']
+    S30Bands = ['B2', 'B3', 'B4', 'B8A', 'B11', 'B12', 'Fmask']
+    aoi = ee.FeatureCollection(transects.__geo_interface__)
 
-        HLS_L30_COLLECTION = ee.ImageCollection('NASA/HLS/HLSL30/v002').filter(ee.Filter.lt('CLOUD_COVERAGE', 30))
-        HLS_S30_COLLECTION = ee.ImageCollection('NASA/HLS/HLSS30/v002').filter(ee.Filter.lt('CLOUD_COVERAGE', 30))
+    def maskHLS(ee_image):
+        qaMask = ee_image.select('Fmask').bitwiseAnd(int('1111', 2)).eq(0)
+        opticalBands = ee_image.select(['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2']).multiply(0.0001)
+        return ee_image.updateMask(qaMask).addBands(opticalBands, None, True).copyProperties(
+            ee_image, ['system:time_start', 'system:index', 'SPACECRAFT_ID', 'CLOUD_COVER'])
 
-        hlsMerged = HLS_L30_COLLECTION.select(L30Bands, SharedBands).merge(HLS_S30_COLLECTION.select(S30Bands, SharedBands))
-        return hlsMerged.map(ndvi).select('NDVI_HSL')
+    l30 = ee.ImageCollection('NASA/HLS/HLSL30/v002').filter(ee.Filter.lt('CLOUD_COVERAGE', 30)).filterBounds(aoi).select(L30Bands, SharedBands).map(maskHLS)
+    s30 = ee.ImageCollection('NASA/HLS/HLSS30/v002').filter(ee.Filter.lt('CLOUD_COVERAGE', 30)).filterBounds(aoi).select(S30Bands, SharedBands).map(maskHLS)
 
-    ndvi_composite_params = {
-        "time_col_name": "survey_date",
-        "n_before": 0,
-        "n_after": 0,
-        "n": "images",
-        "img_coll": ndvi_composite().filterBounds(ee.FeatureCollection(transects.__geo_interface__)),
-        "region_reducer": ee.Reducer.mean(),
-        "scale": 30.0,
-    }
-    transects = transects.merge(label_gdf_with_temporal_image_collection_by_feature(gdf=transects, **ndvi_composite_params),
-                                     left_index=True, right_index=True)
-    
-    transects['img_date_hsl_ndvi'] = pd.to_datetime(transects['img_date']).dt.tz_localize('UTC')
-    transects.drop(columns=['img_date'], inplace=True)
-    
-    transects = transects.merge(label_gdf_with_img(gdf=transects,
-                                     img = ee.Terrain.slope(ee.Image("USGS/SRTMGL1_003").select("elevation")),
-                                     region_reducer= ee.Reducer.mean(),
-                                     scale= 30.0,
-                                     ),
-                                     left_index=True, right_index=True)
-    
-    transects = transects.rename(columns={"mean":"slope"}) 
+    # Optionally restrict to a window around the survey date (recommended).
+    # Set ndvi_window_days=None to search the full HLS archive.
+    if ndvi_window_days is not None:
+        survey_date_ee = ee.Date(since_filter.isoformat())
+        l30 = l30.filterDate(survey_date_ee.advance(-ndvi_window_days, 'day'), survey_date_ee.advance(ndvi_window_days, 'day'))
+        s30 = s30.filterDate(survey_date_ee.advance(-ndvi_window_days, 'day'), survey_date_ee.advance(ndvi_window_days, 'day'))
+
+    ndvi_image = l30.merge(s30).map(
+        lambda img: img.addBands(img.normalizedDifference(['NIR', 'Red']).rename('NDVI_HSL'))
+    ).select('NDVI_HSL').mean()
+
+    slope_image = ee.Terrain.slope(ee.Image("USGS/SRTMGL1_003").select("elevation"))
+
+    # Assign by .values to avoid index-alignment row explosion from label_gdf_with_img's internal explode
+    transects['NDVI_HSL'] = label_gdf_with_img(gdf=transects, img=ndvi_image, region_reducer=ee.Reducer.mean(), scale=30.0)['mean'].values
+    transects['img_date_hsl_ndvi'] = since_filter
+    transects['slope'] = label_gdf_with_img(gdf=transects, img=slope_image, region_reducer=ee.Reducer.mean(), scale=30.0)['mean'].values
+
     transects = transects[["name", "img_date_hsl_ndvi", "NDVI_HSL", "slope", "geometry"]]
 
     patrol_events = patrol_events.merge(transects.drop(columns=["geometry"]), 
@@ -240,13 +233,13 @@ def run_analysis(er_connection: EarthRangerConnection, survey_config: SurveyConf
     output_dir = os.path.join('.', 'Outputs', 'Analysis')
     os.makedirs(output_dir, exist_ok=True)
 
-    patrol_events.to_csv(os.path.join(output_dir, f'DSC_Analysis_{survey_name}_analysis_data.csv'), index=False)
-    
+    patrol_events.to_csv(os.path.join(output_dir, f'DSC_Analysis_{survey_name}{output_suffix}_analysis_data.csv'), index=False)
+
     patrol_events[["serial_number", "transect_id", "dist_to_centre", "ortho_dist", "intersects_transect", "geometry"]].to_file(
-         os.path.join(output_dir, f'DSC_Analysis_{survey_name}_events.gpkg'), index=False)
-    
-    transects.to_file(os.path.join(output_dir, f'DSC_Analysis_{survey_name}_transects.gpkg'), index=False)
-    original_transects.to_file(os.path.join(output_dir, f'DSC_Analysis_{survey_name}_orig_transects.gpkg'), index=False)
+         os.path.join(output_dir, f'DSC_Analysis_{survey_name}{output_suffix}_events.gpkg'), index=False)
+
+    transects.to_file(os.path.join(output_dir, f'DSC_Analysis_{survey_name}{output_suffix}_transects.gpkg'), index=False)
+    original_transects.to_file(os.path.join(output_dir, f'DSC_Analysis_{survey_name}{output_suffix}_orig_transects.gpkg'), index=False)
 
     logger.info(f"--- Finished Analysis for Survey: {survey_config.name} ---")
 
