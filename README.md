@@ -4,7 +4,7 @@ NASA Distance Sample Counts
 ## Setup your environment
 
 ```shell
-conda env create -f environment.yml
+pixi install
 ```
 
 

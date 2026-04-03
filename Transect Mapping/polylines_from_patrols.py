@@ -44,7 +44,7 @@ def main():
         username=er_username,
         password=er_password,
         tcp_limit=5,
-        sub_page_size=5000,
+        sub_page_size=4000,
     ).get_client()
 
     # get a dataframe of patrols based on the parameters

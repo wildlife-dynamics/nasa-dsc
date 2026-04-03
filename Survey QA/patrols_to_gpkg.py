@@ -24,8 +24,8 @@ def main():
     er_server = os.getenv('ER_SERVER') 
     er_username = os.getenv('ER_USERNAME')
     er_password = os.getenv('ER_PASSWORD')
-    er_patrol_type = os.getenv('ER_PATROL_TYPE')
-    survey_number = os.getenv('SURVEY_NUMBER')
+    er_patrol_type = ast.literal_eval(os.getenv('ER_PATROL_TYPE'))
+    survey_name = os.getenv('SURVEY_NAME')
     since_filter = pd.to_datetime(os.getenv('SINCE'))
     until_filter = pd.to_datetime(os.getenv('UNTIL'))
     er_patrol_serials_filter = ast.literal_eval(os.getenv("ER_PATROL_SERIALS_FILTER"))
@@ -37,7 +37,7 @@ def main():
 
 
     # Output DIR
-    output_dir = os.path.join('Outputs', 'Patrols_to_GPKG', er_server.strip("https://"), str(survey_number))
+    output_dir = os.path.join('Outputs', 'Patrols_to_GPKG', er_server.strip("https:////"), str(survey_name))
 
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
@@ -73,36 +73,36 @@ def main():
         )
 
         # localize the timezone
-        patrol_relocs['fixtime'] = patrol_relocs['fixtime'].dt.tz_convert(export_tz)
+        patrol_relocs.gdf['fixtime'] = patrol_relocs.gdf['fixtime'].dt.tz_convert(export_tz)
 
         # filter based on subject_name
         if er_subject_names_filter:
-            patrol_relocs = patrol_relocs[patrol_relocs['extra__subject__name'].isin(er_subject_names_filter)]
+            patrol_relocs = patrol_relocs.gdf[patrol_relocs.gdf['extra__subject__name'].isin(er_subject_names_filter)]
 
         # make sure serial number is an integer type
-        patrol_relocs['patrol_serial_number'] = patrol_relocs['patrol_serial_number'].astype(int)
+        patrol_relocs.gdf['patrol_serial_number'] = patrol_relocs.gdf['patrol_serial_number'].astype(int)
 
         # Export relocs to GPKG
-        if not patrol_relocs.empty:
-            patrol_relocs.groupby(['patrol_serial_number'])[relocs_columns].apply(
+        if not patrol_relocs.gdf.empty:
+            patrol_relocs.gdf.groupby(['patrol_serial_number'])[relocs_columns].apply(
                 lambda t: helper.export_gpkg(df=t, dir=output_dir, outname="patrol_" + str(t.name)+ ".gpkg", lyrname= 'relocs'),
                 include_groups=True,
                 )
         
         # convert relocs to trajectory
-        patrol_relocs["groupby_col"] = patrol_relocs["patrol_serial_number"]
-        patrol_traj = ecoscope.base.Trajectory.from_relocations(patrol_relocs)
+        patrol_relocs.gdf["groupby_col"] = patrol_relocs.gdf["patrol_serial_number"]
+        patrol_traj = ecoscope.trajectory.Trajectory.from_relocations(patrol_relocs)
 
          # make sure serial number is int type
          # TODO: why is the conversion to a trajectory changing the data type? 
-        patrol_traj['extra__patrol_serial_number'] = patrol_traj['extra__patrol_serial_number'].astype(int)
+        patrol_traj.gdf['extra__patrol_serial_number'] = patrol_traj.gdf['extra__patrol_serial_number'].astype(int)
 
         # subset columns
-        patrol_traj = patrol_traj[traj_columns] 
+        patrol_traj.gdf = patrol_traj.gdf[traj_columns] 
 
         # Export each trajectory as a GPKG lyr per patrol_id
-        if not patrol_traj.empty:
-            patrol_traj.groupby(['extra__patrol_serial_number'])[traj_columns].apply(
+        if not patrol_traj.gdf.empty:
+            patrol_traj.gdf.groupby(['extra__patrol_serial_number'])[traj_columns].apply(
                 lambda t: helper.export_gpkg(df=t, dir=output_dir, outname="patrol_" + str(t.name)+ ".gpkg", lyrname='traj'),
                 include_groups=True,
                 )
@@ -116,29 +116,34 @@ def main():
             patrol_type=er_patrol_type,
         )
 
-        # use the event ids to pull the full event details
-        # TODO: move this function to ecoscope-core library
+        # # use the event ids to pull the full event details
+        # # TODO: move this function to ecoscope-core library
         def chunk_df(df, chunk_size):
             chunks = [df.iloc[i : i + chunk_size].copy() for i in range(0, len(df), chunk_size)]
             return chunks
         
-        df_chunk_size = 50 # until this is deployed https://allenai.atlassian.net/browse/ERA-10527, then =50
-        patrol_events = pd.concat([er_io.get_events(event_ids=chunk['id'].astype(str).values.flatten().tolist())
+        df_chunk_size = 50 # until this is deployed https://allenai.atlassian.net/browse/ERA-10527,then =50
+        patrol_events = pd.concat([er_io.get_events(event_ids=chunk['id'].astype(str).values.flatten().tolist(), include_details=True)
                                         for chunk in chunk_df(patrol_events, df_chunk_size)]).reset_index()
+
+        # patrol_events = er_io.get_events(event_ids=patrol_events['id'].astype(str).values.flatten().tolist())
         
         # convert the event times to local time
         patrol_events['time'] = patrol_events['time'].dt.tz_convert(export_tz)
-        
+
         # pull out the patrol ID
         patrol_events['patrol_id'] = patrol_events['patrols'].apply(lambda x: x[0])
 
         # create patrol_serial_number column
-
         patrol_events['patrol_serial_number'] = patrol_events['patrol_id'].map(dict(zip(patrols_df['id'].to_list(), patrols_df['serial_number'].to_list())))
         patrol_events['patrol_serial_number'] = patrol_events['patrol_serial_number'].astype(int)
 
+        print(patrol_events.columns)
+
         # unpack the event_details into their own columns
         ecoscope.io.earthranger_utils.normalize_column(patrol_events, "event_details")
+
+        print(patrol_events.columns)
 
         # subset columns
         patrol_events = patrol_events[event_columns] 
