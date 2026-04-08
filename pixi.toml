@@ -1,21 +1,27 @@
-[project]
+[workspace]
 name = "nasa-dsc"
 channels = ["https://repo.prefix.dev/ecoscope-workflows", "conda-forge"]
-platforms = ["osx-64", "linux-64"]
+platforms = ["osx-64", "osx-arm64", "linux-64"]
 
 [tasks]
 run-analysis = "python DSC_Analysis/DSC_Analysis.py"
+run-qa = "python 'Survey QA/patrols_to_gpkg.py'"
+run-transects = "python 'Transect Mapping/polylines_from_patrols.py'"
 
 [dependencies]
 python = ">=3.9"
 geopandas = "*"
 pyproj = "*"
+numpy = "*"
+pytz = "*"
+pydantic = ">=2"
+earthengine-api = "*"
 python-dotenv = "*"
 
-    [dependencies.ecoscope-workflows-core]
-    channel = 'https://repo.prefix.dev/ecoscope-workflows/'
-    version = '0.18.0'
+[dependencies.ecoscope-workflows-core]
+channel = "https://repo.prefix.dev/ecoscope-workflows"
+version = "0.22.18"
 
-    [dependencies.ecoscope-workflows-ext-ecoscope]
-    channel = 'https://repo.prefix.dev/ecoscope-workflows/'
-    version = '0.18.0'
+[dependencies.ecoscope-workflows-ext-ecoscope]
+channel = "https://repo.prefix.dev/ecoscope-workflows"
+version = "0.22.18"
