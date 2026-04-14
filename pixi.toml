@@ -1,6 +1,10 @@
 [workspace]
 name = "nasa-dsc"
-channels = ["https://repo.prefix.dev/ecoscope-workflows", "conda-forge"]
+channels = [
+  "https://repo.prefix.dev/ecoscope-workflows",
+  "https://repo.prefix.dev/ecoscope-workflows-custom",
+  "conda-forge",
+]
 platforms = ["osx-64", "osx-arm64", "linux-64"]
 
 [tasks]
@@ -20,8 +24,12 @@ python-dotenv = "*"
 
 [dependencies.ecoscope-workflows-core]
 channel = "https://repo.prefix.dev/ecoscope-workflows"
-version = "0.22.18"
+version = "0.22.18.*"
 
 [dependencies.ecoscope-workflows-ext-ecoscope]
 channel = "https://repo.prefix.dev/ecoscope-workflows"
-version = "0.22.18"
+version = "0.22.18.*"
+
+[dependencies.ecoscope-workflows-ext-custom]
+channel = "https://repo.prefix.dev/ecoscope-workflows-custom"
+version = "0.0.46"

@@ -42,6 +42,7 @@ from ecoscope.io.earthranger_utils import normalize_column # unpacks a nested JS
 # --- EarthRanger / EarthEngine connections ---
 from ecoscope_workflows_ext_ecoscope.connections import EarthRangerConnection  # manages OAuth/token auth and HTTP session to an EarthRanger server
 from ecoscope_workflows_ext_ecoscope.connections import EarthEngineConnection  # initialises the GEE Python session using a Google service account key file
+from ecoscope_workflows_ext_custom.tasks.io import process_events_details      # resolves event_details enum values and maps field keys to human-readable titles using the EarthRanger event type schema
 
 # --- Config validation ---
 from pydantic import BaseModel, Field, TypeAdapter
@@ -163,6 +164,20 @@ def do_events_intersect_transect(events: pd.DataFrame, transects: gpd.GeoDataFra
     return events
 
 
+def unpack_event_details(df: pd.DataFrame) -> pd.DataFrame:
+    # Expands the event_details dict column into flat columns without any prefix.
+    # Must be called after process_events_details(map_to_titles=True) so the dict keys
+    # are already human-readable display names (e.g. "Transect ID", "Team Members").
+    # For sites where the schema endpoint returns 404 the raw internal key names are kept.
+    details = pd.DataFrame(
+        df['event_details'].apply(lambda x: x if isinstance(x, dict) else {}).tolist(),
+        index=df.index
+    )
+    return pd.concat([df.drop(columns=['event_details']), details], axis=1)
+
+
+
+
 def build_hls_ndvi_image(aoi: ee.FeatureCollection, since: datetime, ndvi_window_days: Optional[int]) -> ee.Image:
     # Constructs a single cloud-free mean NDVI composite image from NASA's Harmonized
     # Landsat-Sentinel (HLS) dataset for use in labelling survey transects.
@@ -268,19 +283,38 @@ def run_analysis(
         logger.warning(f"No patrol events found for survey '{survey_name}'. Skipping.")
         return
 
-    # Re-fetch full event details in batches of 25.
-    # The initial get_patrol_events response does not include event_details (nested field data),
-    # so we fetch them separately and merge back on event ID.
-    patrol_events2 = pd.concat([
+    # Fetch full events (with event_details) in batches of 25.
+    # get_patrol_events returns summary records only; get_events fetches the complete
+    # event payload including nested event_details (custom field data).
+    events = pd.concat([
         er_connection.get_events(
             event_ids=chunk.index.astype(str).values.flatten().tolist(),
             include_details=True
         )
         for chunk in chunk_df(patrol_events, chunk_size=25)
     ])
+
+    # Build the survey metadata export directly from events — all event types, as-is.
+    # Unpack location before process_events_details so lat/lon are plain columns throughout.
+    survey_events = events.copy()
+    survey_events['latitude']  = survey_events['location'].apply(
+        lambda v: v.get('latitude')  if isinstance(v, dict) else None
+    )
+    survey_events['longitude'] = survey_events['location'].apply(
+        lambda v: v.get('longitude') if isinstance(v, dict) else None
+    )
+    survey_events = survey_events.drop(columns=['location', 'index'], errors='ignore')
+    survey_events = process_events_details(survey_events, client=er_connection, map_to_titles=True)
+    survey_events = unpack_event_details(survey_events)
+    survey_events['reported_by'] = survey_events['reported_by'].apply(
+        lambda v: v.get('name', '') if isinstance(v, dict) else (str(v) if pd.notna(v) else '')
+    )
+    survey_events = survey_events.reset_index(drop=True)
+
+    # Merge event_details back into patrol_events for the main wildlife analysis pipeline.
     patrol_events = pd.merge(
         left=patrol_events,
-        right=patrol_events2[['event_details']],
+        right=events[['event_details']],
         how='left',
         left_index=True,
         right_index=True,
@@ -383,7 +417,8 @@ def run_analysis(
         how="left"
     ).drop(columns=["name"])
 
-    # Write all four output files for this survey:
+    # Write all five output files for this survey:
+    #   _survey_metadata.csv   — one row per transect leg, shows which transects were surveyed
     #   _analysis_data.csv     — full enriched event table for use in R/distance sampling models
     #   _events.gpkg           — spatial event layer (projected animal positions + key attributes)
     #   _transects.gpkg        — buffered transects with NDVI and slope labels
@@ -391,7 +426,19 @@ def run_analysis(
     output_dir = os.path.join('.', 'Outputs', 'Analysis')
     os.makedirs(output_dir, exist_ok=True)
 
-    patrol_events.to_csv(
+    survey_events.to_csv(
+        os.path.join(output_dir, f'DSC_Analysis_{survey_name}_metadata.csv'), index=False)
+
+    csv_columns = [
+        "transect_id", "level_1", "title", "patrol_id", "patrol_serial_number",
+        "totalcount", "num_juveniles", "event_type", "num_observers", "dist_to_centre",
+        "geometry", "species", "time", "serial_number", "radialangle", "survey_id",
+        "off_transect_dist", "orig_geometry", "ortho_dist", "intersects_transect",
+        "img_date_hsl_ndvi", "NDVI_HSL", "slope"
+    ]
+    # Only include columns that exist in the dataframe (guards against optional fields)
+    csv_columns = [c for c in csv_columns if c in patrol_events.columns]
+    patrol_events[csv_columns].to_csv(
         os.path.join(output_dir, f'DSC_Analysis_{survey_name}_analysis_data.csv'), index=False)
     patrol_events[["serial_number", "transect_id", "dist_to_centre", "ortho_dist", "intersects_transect", "geometry"]].to_file(
         os.path.join(output_dir, f'DSC_Analysis_{survey_name}_events.gpkg'), index=False)
