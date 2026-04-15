@@ -294,22 +294,15 @@ def run_analysis(
         for chunk in chunk_df(patrol_events, chunk_size=25)
     ])
 
-    # Build the survey metadata export directly from events — all event types, as-is.
-    # Unpack location before process_events_details so lat/lon are plain columns throughout.
-    survey_events = events.copy()
-    survey_events['latitude']  = survey_events['location'].apply(
-        lambda v: v.get('latitude')  if isinstance(v, dict) else None
-    )
-    survey_events['longitude'] = survey_events['location'].apply(
-        lambda v: v.get('longitude') if isinstance(v, dict) else None
-    )
-    survey_events = survey_events.drop(columns=['location', 'index'], errors='ignore')
+    # Filter → select → resolve → unpack
+    survey_events = events[events['event_type'] == 'distancecountpatrol_rep'].copy()
+    survey_events['latitude']    = survey_events['location'].apply(lambda v: v.get('latitude')  if isinstance(v, dict) else None)
+    survey_events['longitude']   = survey_events['location'].apply(lambda v: v.get('longitude') if isinstance(v, dict) else None)
+    survey_events['reported_by'] = survey_events['reported_by'].apply(lambda v: v.get('name', '') if isinstance(v, dict) else str(v) if pd.notna(v) else '')
+    survey_events = survey_events[['serial_number', 'event_type', 'time', 'latitude', 'longitude', 'reported_by', 'event_details']]
     survey_events = process_events_details(survey_events, client=er_connection, map_to_titles=True)
     survey_events = unpack_event_details(survey_events)
-    survey_events['reported_by'] = survey_events['reported_by'].apply(
-        lambda v: v.get('name', '') if isinstance(v, dict) else (str(v) if pd.notna(v) else '')
-    )
-    survey_events = survey_events.reset_index(drop=True)
+    survey_events['Team Members'] = survey_events['Team Members'].apply(lambda v: ', '.join(v) if isinstance(v, list) else v)
 
     # Merge event_details back into patrol_events for the main wildlife analysis pipeline.
     patrol_events = pd.merge(
