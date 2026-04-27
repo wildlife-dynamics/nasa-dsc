@@ -129,8 +129,8 @@ for _, row in gdf_utm.iterrows():
     # Buggy: buffer MultiLineString directly
     buf_buggy = g.buffer(BUFFER_DIST, cap_style="flat")
 
-    # Fixed: merge segments into a single LineString first, then buffer
-    buf_fixed = linemerge(g).buffer(BUFFER_DIST, cap_style="flat")
+    # Fixed: merge segments into a single LineString, simplify, then buffer — matches DSC_Analysis.py
+    buf_fixed = linemerge(g).simplify(50).buffer(BUFFER_DIST, resolution=5, cap_style="flat")
 
     h_buggy = len(list(buf_buggy.interiors)) if hasattr(buf_buggy, "interiors") else "—"
     h_fixed = len(list(buf_fixed.interiors)) if hasattr(buf_fixed, "interiors") else "—"

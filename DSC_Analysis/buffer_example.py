@@ -143,9 +143,9 @@ def run(survey_name):
 
         buf_buggy = g.buffer(BUFFER_DIST, cap_style="flat")
         buf_fixed = (
-            linemerge(g).buffer(BUFFER_DIST, cap_style="flat")
+            linemerge(g).simplify(50).buffer(BUFFER_DIST, resolution=5, cap_style="flat")
             if g.geom_type == "MultiLineString"
-            else g.buffer(BUFFER_DIST, cap_style="flat")
+            else g.simplify(50).buffer(BUFFER_DIST, resolution=5, cap_style="flat")
         )
 
         # Count interior holes across all parts — handles both Polygon and MultiPolygon
