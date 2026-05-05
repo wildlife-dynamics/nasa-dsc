@@ -75,6 +75,7 @@ class SurveyConfig(BaseModel):
     since: datetime                                  # start of the patrol event query window (ISO 8601)
     until: datetime                                  # end of the patrol event query window (ISO 8601)
     group_id: str = Field(alias='erSpatialTransectsGroupId')  # UUID of the spatial feature group containing the transect lines
+    simplify_tolerance: int = Field(50, alias='simplifyTolerance')  # Douglas-Peucker tolerance in metres applied after linemerge, before buffering; defaults to 50
 
 
 class EarthRangerConfig(BaseModel):
@@ -400,7 +401,7 @@ def run_analysis(
     transects["geometry"] = transects["geometry"].apply(
         lambda g: linemerge(g) if g.geom_type == 'MultiLineString' else g
     )
-    transects["geometry"] = transects["geometry"].simplify(50)
+    transects["geometry"] = transects["geometry"].simplify(survey_config.simplify_tolerance)
     transects["geometry"] = transects["geometry"].buffer(500, resolution=5, cap_style='flat', single_sided=False)
 
     patrol_events = (
