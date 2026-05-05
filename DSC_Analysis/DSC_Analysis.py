@@ -21,6 +21,7 @@ import os                                # file path construction and directory 
 import json                              # parsing config.json
 import logging                           # structured logging throughout the pipeline
 from math import sin, radians            # trigonometry for projecting animal positions from radial angle
+from shapely.ops import linemerge        # merges MultiLineString segments into a single LineString before buffering
 from datetime import datetime            # type annotation for survey date fields in pydantic models
 from typing import Dict, Optional, List  # type hints used in function signatures and pydantic models
 
@@ -74,6 +75,7 @@ class SurveyConfig(BaseModel):
     since: datetime                                  # start of the patrol event query window (ISO 8601)
     until: datetime                                  # end of the patrol event query window (ISO 8601)
     group_id: str = Field(alias='erSpatialTransectsGroupId')  # UUID of the spatial feature group containing the transect lines
+    simplify_tolerance: int = Field(50, alias='simplifyTolerance')  # Douglas-Peucker tolerance in metres applied after linemerge, before buffering; defaults to 50
 
 
 class EarthRangerConfig(BaseModel):
@@ -150,6 +152,29 @@ def point_pos(x0: float, y0: float, d: float, theta: float):
     # theta is the radial angle in degrees measured clockwise from the transect bearing.
     theta_rad = radians(theta)
     return x0 + d * sin(theta_rad), y0 + d * sin(theta_rad)
+
+
+# def repair_transect_buffer(geom):
+#     # EarthRanger sometimes stores transect lines as a MultiLineString of individual
+#     # 2-point GPS segments rather than a single connected LineString.  When these are
+#     # buffered with cap_style='flat', the union of many flat-capped rectangles leaves
+#     # triangular gaps at bend junctions, which become interior holes in the output
+#     # polygon and render as scrambled vertices in QGIS.
+#     #
+#     # Step 1 — linemerge: stitches a chain of touching segments into a single
+#     # LineString so the buffer produces one clean strip.  If linemerge cannot fully
+#     # resolve the chain (e.g. the source geometry has micro-loops or reversed segments),
+#     # the result is still a MultiLineString with fewer parts, and step 2 handles
+#     # any residual holes.
+#     #
+#     # Step 2 — fill holes: drops any interior rings that survive after buffering.
+#     # These are always artefacts of tangled source geometry, not intentional voids.
+#     from shapely.geometry import Polygon as ShapelyPolygon
+#     if geom.geom_type == 'MultiLineString':
+#         geom = linemerge(geom)
+#     if geom.geom_type == 'Polygon' and len(list(geom.interiors)) > 0:
+#         return ShapelyPolygon(geom.exterior)
+#     return geom
 
 
 def do_events_intersect_transect(events: pd.DataFrame, transects: gpd.GeoDataFrame) -> pd.DataFrame:
@@ -370,10 +395,13 @@ def run_analysis(
     )
     patrol_events = patrol_events[patrol_events["ortho_dist"] != -1]
 
-    # Simplify transect geometries (reduces vertex count for faster spatial ops) then buffer
-    # by 500m flat-capped to create the detection strip. Flag whether each projected animal
-    # position falls within this strip — used as a quality filter in downstream DSC models.
-    transects["geometry"] = transects["geometry"].simplify(50)
+    # Merge MultiLineString segment chains into a single LineString before buffering to
+    # prevent interior holes from forming at bend junctions (flat-cap buffer artefact).
+    # Then simplify and buffer by 500m flat-capped to create the detection strip.
+    transects["geometry"] = transects["geometry"].apply(
+        lambda g: linemerge(g) if g.geom_type == 'MultiLineString' else g
+    )
+    transects["geometry"] = transects["geometry"].simplify(survey_config.simplify_tolerance)
     transects["geometry"] = transects["geometry"].buffer(500, resolution=5, cap_style='flat', single_sided=False)
 
     patrol_events = (
