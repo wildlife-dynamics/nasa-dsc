@@ -89,44 +89,40 @@ Patrol-start events (`distancecountpatrol_rep`) are pulled from the same event b
 
 ### Full pipeline flow
 
-```
-EarthRanger
-  ├── Transect lines  (get_spatial_features_group)
-  └── Patrol events   (get_patrol_events → summary only)
-            │
-            ▼ get_events in batches of 25 (full payload with event_details)
-            │
-            ├──► distancecountpatrol_rep  ──► _metadata.csv
-            │
-            └──► distancecountwildlife_rep
-                      │
-                      ▼
-            Resolve event_details enum values → human-readable titles
-            Unpack event_details dict → flat columns
-            Forward/back-fill transect_id + num_observers per patrol
-            Rename columns via eventColumnTransform
-                      │
-                      ▼ Reproject to UTM
-                      │
-                      ├── off_transect_dist  (observer GPS → transect centreline)
-                      │
-                      ├── Project observer → animal position
-                      │     animal_x = obs_x + dist × sin(angle)
-                      │     animal_y = obs_y + dist × sin(angle)
-                      │
-                      ├── ortho_dist  (animal position → transect centreline)
-                      │
-                      └── intersects_transect  (animal within 500m buffer?)
-                                │
-                                ▼ Reproject transects → WGS84
-                                │
-                      Google Earth Engine
-                        ├── HLS NDVI composite  → mean NDVI per transect
-                        └── SRTM slope          → mean slope per transect
-                                │
-                                ▼ Join NDVI + slope onto events
-                                │
-                      Write to Outputs/Analysis/
+```mermaid
+flowchart TD
+    ER[(EarthRanger)]
+
+    ER -->|get_spatial_features_group| TL[Transect Lines]
+    ER -->|get_patrol_events| PE[Patrol Events\nsummary records]
+    PE -->|get_events in batches of 25| FE[Full Events\nwith event_details]
+
+    FE -->|distancecountpatrol_rep| META[/"_metadata.csv\nteam · transect · observers"/]
+    FE -->|distancecountwildlife_rep| WL[Wildlife Sightings]
+
+    WL --> CLEAN["Resolve event_details enums → human-readable titles\nUnpack event_details → flat columns\nForward/back-fill transect_id + num_observers per patrol\nRename columns via eventColumnTransform"]
+
+    TL --> UTM
+    CLEAN --> UTM[Reproject to UTM]
+
+    UTM --> D1["off_transect_dist\nobserver GPS → transect centreline"]
+    D1 --> PROJ["Project observer → animal position\nobs_x + dist × sin·angle\nobs_y + dist × sin·angle"]
+    PROJ --> D2["ortho_dist\nanimal position → transect centreline"]
+    D2 --> BUF["linemerge → simplify → buffer 500 m\nintersects_transect flag"]
+
+    BUF --> WGS[Reproject transects → WGS84]
+
+    WGS --> GEE[(Google Earth Engine)]
+    GEE -->|"HLS: Landsat 8/9 + Sentinel-2\ncloud-masked · 30 m"| NDVI[Mean NDVI per transect]
+    GEE -->|USGS SRTMGL1 30 m| SLOPE[Mean slope per transect]
+
+    NDVI --> JOIN[Join NDVI + slope onto events]
+    SLOPE --> JOIN
+
+    JOIN --> O1[/"_analysis_data.csv"/]
+    JOIN --> O2[/"_events.gpkg"/]
+    JOIN --> O3[/"_transects.gpkg"/]
+    TL   --> O4[/"_orig_transects.gpkg"/]
 ```
 
 ---
